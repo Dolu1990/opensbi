@@ -18,15 +18,10 @@
 
 /* clang-format off */
 
-#define VEX_HART_COUNT			4
-#define VEX_PLATFORM_FEATURES  \
-	(SBI_PLATFORM_HAS_TIMER_VALUE | SBI_PLATFORM_HAS_MFAULTS_DELEGATION)
-
-#define VEX_CLINT_ADDR 0xF0010000
-
-#define VEX_HART_STACK_SIZE		8192
-
-
+#define VEX_HART_COUNT         8
+#define VEX_PLATFORM_FEATURES  (SBI_PLATFORM_HAS_TIMER_VALUE | SBI_PLATFORM_HAS_MFAULTS_DELEGATION)
+#define VEX_CLINT_ADDR         0xF0010000
+#define VEX_HART_STACK_SIZE	   8192
 
 /* clang-format on */
 
@@ -125,7 +120,7 @@ const struct sbi_platform_operations platform_ops = {
 const struct sbi_platform platform = {
 	.opensbi_version	= OPENSBI_VERSION,
 	.platform_version	= SBI_PLATFORM_VERSION(0x0, 0x01),
-	.name			    = "LiteX/VexRiscv SMP",
+	.name			    = "LiteX / VexRiscv-SMP",
 	.features		    = VEX_PLATFORM_FEATURES,
 	.hart_count		    = VEX_HART_COUNT,
 	.hart_stack_size	= VEX_HART_STACK_SIZE,
