@@ -11,120 +11,154 @@
 #include <sbi/sbi_const.h>
 #include <sbi/sbi_hart.h>
 #include <sbi/sbi_platform.h>
+#include <sbi_utils/fdt/fdt_helper.h>
+#include <sbi_utils/fdt/fdt_fixup.h>
+#include <sbi_utils/ipi/aclint_mswi.h>
 #include <sbi_utils/irqchip/plic.h>
-#include <sbi_utils/serial/uart8250.h>
-#include <sbi_utils/sys/clint.h>
+#include <sbi_utils/serial/litex-uart.h>
+#include <sbi_utils/timer/aclint_mtimer.h>
 
-
-/* clang-format off */
-
-#define VEX_HART_COUNT         8
-#define VEX_PLATFORM_FEATURES  (SBI_PLATFORM_HAS_TIMER_VALUE | SBI_PLATFORM_HAS_MFAULTS_DELEGATION)
-#define VEX_CLINT_ADDR         0xF0010000
-#define VEX_HART_STACK_SIZE	   8192
+#define VEX_DEFAULT_HART_COUNT	8
+#define VEX_DEFAULT_PLATFORM_FEATURES	SBI_PLATFORM_HAS_MFAULTS_DELEGATION
+#define VEX_DEFAULT_UART_ADDR	0xf0001000
+#define VEX_DEFAULT_PLIC_ADDR	0xf0c00000
+#define VEX_DEFAULT_PLIC_NUM_SOURCES	4
+#define VEX_DEFAULT_CLINT_ADDR	0xF0010000
+#define VEX_DEFAULT_ACLINT_MTIMER_FREQ	100000000
+#define VEX_DEFAULT_ACLINT_MSWI_ADDR	\
+		(VEX_DEFAULT_CLINT_ADDR + CLINT_MSWI_OFFSET)
+#define VEX_DEFAULT_ACLINT_MTIMER_ADDR	\
+		(VEX_DEFAULT_CLINT_ADDR + CLINT_MTIMER_OFFSET)
+#define VEX_DEFAULT_HART_STACK_SIZE	8192
 
 /* clang-format on */
 
-static struct clint_data clint = {VEX_CLINT_ADDR, 0, VEX_HART_COUNT, true};
+static struct plic_data plic = {
+	.addr = VEX_DEFAULT_PLIC_ADDR,
+	.num_src = VEX_DEFAULT_PLIC_NUM_SOURCES,
+};
 
+static struct aclint_mswi_data mswi = {
+	.addr = VEX_DEFAULT_ACLINT_MSWI_ADDR,
+	.size = ACLINT_MSWI_SIZE,
+	.first_hartid = 0,
+	.hart_count = VEX_DEFAULT_HART_COUNT,
+};
+
+static struct aclint_mtimer_data mtimer = {
+	.mtime_freq = VEX_DEFAULT_ACLINT_MTIMER_FREQ,
+	.mtime_addr = VEX_DEFAULT_ACLINT_MTIMER_ADDR +
+			  ACLINT_DEFAULT_MTIME_OFFSET,
+	.mtime_size = ACLINT_DEFAULT_MTIME_SIZE,
+	.mtimecmp_addr = VEX_DEFAULT_ACLINT_MTIMER_ADDR +
+			  ACLINT_DEFAULT_MTIMECMP_OFFSET,
+	.mtimecmp_size = ACLINT_DEFAULT_MTIMECMP_SIZE,
+	.first_hartid = 0,
+	.hart_count = VEX_DEFAULT_HART_COUNT,
+	.has_64bit_mmio = true,
+};
+
+/*
+ * VexRiscv platform early initialization.
+ */
+static int vex_early_init(bool cold_boot)
+{
+	return 0;
+}
+
+/*
+ * VexRiscv platform final initialization.
+ */
 static int vex_final_init(bool cold_boot)
 {
+	void *fdt;
+
+	if (!cold_boot)
+		return 0;
+
+	fdt = fdt_get_address();
+	fdt_fixups(fdt);
+
 	return 0;
 }
 
-static u32 vex_pmp_region_count(u32 hartid)
-{
-	return 0;
-}
-
-static int vex_pmp_region_info(u32 hartid, u32 index, ulong *prot, ulong *addr,
-				ulong *log2size)
-{
-	int ret = 0;
-
-	switch (index) {
-	default:
-		ret = -1;
-		break;
-	};
-
-	return ret;
-}
-
-
-extern void vex_putc(char ch);
-extern int vex_getc(void);
-
+/*
+ * Initialize the vexRiscv console.
+ */
 static int vex_console_init(void)
 {
-	return 0;
+	return litex_uart_init(VEX_DEFAULT_UART_ADDR);
 }
 
+/*
+ * Initialize the vexRiscv interrupt controller for current HART.
+ */
 static int vex_irqchip_init(bool cold_boot)
 {
-	return 0;
+	int rc;
+	u32 hartid = current_hartid();
+
+	if (cold_boot) {
+		rc = plic_cold_irqchip_init(&plic);
+		if (rc)
+			return rc;
+	}
+
+	return plic_warm_irqchip_init(&plic, hartid * 2, hartid * 2 + 1);
+
 }
 
+/*
+ * Initialize IPI for current HART.
+ */
 static int vex_ipi_init(bool cold_boot)
 {
 	int rc;
 
 	if (cold_boot) {
-		rc = clint_cold_ipi_init(&clint);
+		rc = aclint_mswi_cold_init(&mswi);
 		if (rc)
 			return rc;
 	}
 
-	return clint_warm_ipi_init();
+	return aclint_mswi_warm_init();
 }
 
+/*
+ * Initialize vexRiscv timer for current HART.
+ */
 static int vex_timer_init(bool cold_boot)
 {
 	int rc;
 	if (cold_boot) {
-		rc = clint_cold_timer_init(&clint, NULL); /* Timer has no reference */
+		rc = aclint_mtimer_cold_init(&mtimer, NULL); /* Timer has no reference */
 		if (rc)
 			return rc;
 	}
 
-	return clint_warm_timer_init();
+	return aclint_mtimer_warm_init();
 }
 
-static int vex_system_reset(u32 type)
-{
-	/* Tell the "finisher" that the simulation
-	 * was successful so that QEMU exits
-	 */
-
-	return 0;
-}
-
+/*
+ * Platform descriptor.
+ */
 const struct sbi_platform_operations platform_ops = {
-	.pmp_region_count	= vex_pmp_region_count,
-	.pmp_region_info	= vex_pmp_region_info,
-	.final_init		    = vex_final_init,
-	.console_putc		= vex_putc,
-	.console_getc		= vex_getc,
-	.console_init		= vex_console_init,
-	.irqchip_init		= vex_irqchip_init,
-	.ipi_send		    = clint_ipi_send,
-	.ipi_clear		    = clint_ipi_clear,
-	.ipi_init		    = vex_ipi_init,
-	.timer_value		= clint_timer_value,
-	.timer_event_stop	= clint_timer_event_stop,
-	.timer_event_start	= clint_timer_event_start,
-	.timer_init			= vex_timer_init,
-	.system_reset		= vex_system_reset
+	.early_init = vex_early_init,
+	.final_init = vex_final_init,
+	.console_init = vex_console_init,
+	.irqchip_init = vex_irqchip_init,
+	.ipi_init = vex_ipi_init,
+	.timer_init = vex_timer_init
 };
 
 const struct sbi_platform platform = {
-	.opensbi_version	= OPENSBI_VERSION,
-	.platform_version	= SBI_PLATFORM_VERSION(0x0, 0x01),
-	.name			    = "LiteX / VexRiscv-SMP",
-	.features		    = VEX_PLATFORM_FEATURES,
-	.hart_count		    = VEX_HART_COUNT,
-	.hart_stack_size	= VEX_HART_STACK_SIZE,
-	.platform_ops_addr	= (unsigned long)&platform_ops
+	.opensbi_version = OPENSBI_VERSION,
+	.platform_version = SBI_PLATFORM_VERSION(0x0, 0x01),
+	.name = "LiteX / VexRiscv-SMP",
+	.features = VEX_DEFAULT_PLATFORM_FEATURES,
+	.hart_count = VEX_DEFAULT_HART_COUNT,
+	.hart_stack_size = VEX_DEFAULT_HART_STACK_SIZE,
+	.heap_size =
+		SBI_PLATFORM_DEFAULT_HEAP_SIZE(VEX_DEFAULT_HART_COUNT),
+	.platform_ops_addr = (unsigned long)&platform_ops
 };
-
-
