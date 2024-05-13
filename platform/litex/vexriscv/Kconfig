@@ -7,4 +7,5 @@ config PLATFORM_VEXRISCV_LITEX
 	select IRQCHIP_PLIC
 	select SERIAL_LITEX
 	select TIMER_MTIMER
+	select  FDT_PMU
 	default y

@@ -8,6 +8,7 @@
 #include <sbi/riscv_asm.h>
 #include <sbi/riscv_encoding.h>
 #include <sbi/riscv_io.h>
+#include <sbi/sbi_console.h>
 #include <sbi/sbi_const.h>
 #include <sbi/sbi_hart.h>
 #include <sbi/sbi_platform.h>
@@ -17,6 +18,7 @@
 #include <sbi_utils/irqchip/plic.h>
 #include <sbi_utils/serial/litex-uart.h>
 #include <sbi_utils/timer/aclint_mtimer.h>
+#include <sbi_utils/fdt/fdt_pmu.h>
 
 #define VEX_DEFAULT_HART_COUNT	8
 #define VEX_DEFAULT_PLATFORM_FEATURES	SBI_PLATFORM_HAS_MFAULTS_DELEGATION
@@ -139,6 +141,44 @@ static int vex_timer_init(bool cold_boot)
 	return aclint_mtimer_warm_init();
 }
 
+static int vex_pmu_init(void)
+{
+	int rc;
+
+
+	rc = fdt_pmu_setup(fdt_get_address());
+	if (rc && rc != SBI_ENOENT)
+		return rc;
+
+
+
+
+	return 0;
+}
+
+static uint64_t vex_pmu_xlate_to_mhpmevent(uint32_t event_idx,
+					       uint64_t data)
+{
+	uint64_t evt_val = 0;
+
+	/* data is valid only for raw events and is equal to event selector */
+	if (event_idx == SBI_PMU_EVENT_RAW_IDX)
+		evt_val = data;
+	else {
+		/**
+		 * Generic platform follows the SBI specification recommendation
+		 * i.e. zero extended event_idx is used as mhpmevent value for
+		 * hardware general/cache events if platform does't define one.
+		 */
+		evt_val = fdt_pmu_get_select_value(event_idx);
+		if (!evt_val)
+			evt_val = (uint64_t)event_idx;
+	}
+
+	return evt_val;
+}
+
+
 /*
  * Platform descriptor.
  */
@@ -148,6 +188,8 @@ const struct sbi_platform_operations platform_ops = {
 	.console_init = vex_console_init,
 	.irqchip_init = vex_irqchip_init,
 	.ipi_init = vex_ipi_init,
+	.pmu_init = vex_pmu_init,
+	.pmu_xlate_to_mhpmevent = vex_pmu_xlate_to_mhpmevent,
 	.timer_init = vex_timer_init
 };
 
