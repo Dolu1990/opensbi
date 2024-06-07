@@ -42,7 +42,6 @@ static void litex_uart_putc(char ch)
 {
 	while (get_reg(UART_REG_TXFULL));
 	set_reg(UART_REG_RXTX, ch);
-	set_reg(UART_REG_EV_PENDING, UART_EV_TX);
 }
 
 static int litex_uart_getc(void)
