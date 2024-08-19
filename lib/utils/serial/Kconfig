@@ -44,6 +44,11 @@ config FDT_SERIAL_LITEX
 	select SERIAL_LITEX
 	default n
 
+config FDT_SERIAL_SPINAL
+	bool "Spinal UART FDT driver"
+	select SERIAL_SPINAL
+	default n
+
 config FDT_SERIAL_UART8250
 	bool "8250 UART FDT driver"
 	select SERIAL_UART8250
@@ -78,6 +83,10 @@ config SERIAL_SIFIVE
 
 config SERIAL_LITEX
 	bool "LiteX UART support"
+	default n
+
+config SERIAL_SPINAL
+	bool "Spinal UART support"
 	default n
 
 config SERIAL_UART8250
