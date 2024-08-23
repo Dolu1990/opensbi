@@ -1,7 +1,7 @@
 #include <sbi/riscv_io.h>
 #include <sbi/sbi_console.h>
 
-static volatile unsigned long *uart_base;
+static volatile unsigned int *uart_base;
 
 #define UART_DATA 0
 #define UART_STATUS 1
@@ -26,7 +26,7 @@ static struct sbi_console_device spinal_console = {
 
 int spinal_uart_init(unsigned long base)
 {
-	uart_base = (unsigned long *)base;
+	uart_base = (unsigned int *)base;
 	sbi_console_set_device(&spinal_console);
 	return 0;
 }
